@@ -1,0 +1,36 @@
+name: Auto Sync with Upstream
+
+# 触发规则：每天北京时间凌晨3点自动同步，也支持手动触发
+on:
+  schedule:
+    - cron: '0 19 * * *'  # UTC时间19点 = 北京时间凌晨3点，可自行调整
+  workflow_dispatch:     # 允许手动触发同步
+
+# 赋予工作流写入仓库代码的权限
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    # 使用Ubuntu系统运行同步脚本
+    runs-on: ubuntu-latest
+    steps:
+      # 第一步：检出你的Fork仓库代码
+      - name: Checkout your fork repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 拉取所有历史记录，确保同步完整
+
+      # 第二步：添加上游仓库并同步（核心步骤）
+      - name: Add upstream and sync code
+        run: |
+          # 👇 这里替换成你Fork的原仓库地址（必填！）
+          git remote add upstream https://github.com/yanygm/Launcher_V2.git
+          # 拉取上游仓库最新代码
+          git fetch upstream
+          # 切换到主分支
+          git checkout main
+          # 合并上游主分支代码（快进合并，无冲突时生效）
+          git merge --ff-only upstream/main
+          # 推送到你的Fork仓库
+          git push origin main
