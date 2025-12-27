@@ -60,49 +60,85 @@ class MemoryModifier
 
     public void LaunchAndModifyMemory(string kartRiderDirectory)
     {
-        DataPacket packet = new DataPacket
+        if (File.Exists(Path.Combine(kartRiderDirectory, "25登录器.exe")))
         {
-            Nickname = ProfileService.SettingConfig.Name,
-            TimeTicks = MultyPlayer.GetUpTime()
-        };
-
-        Process process = null;
-        try
-        {
-            // 1. 启动目标进程
-            string passport = Base64Helper.Encode(JsonHelper.Serialize(packet));
-            ProcessStartInfo startInfo = new ProcessStartInfo("KartRider.exe", $"TGC -region:3 -passport:{passport}")
+            Process process25 = null;
+            try
             {
-                WorkingDirectory = Path.GetFullPath(kartRiderDirectory),
-                UseShellExecute = true,
-                Verb = "runas" // 请求管理员权限（内存修改可能需要）
+                ProcessStartInfo startInfo = new ProcessStartInfo("25登录器.exe")
+                {
+                    WorkingDirectory = Path.GetFullPath(kartRiderDirectory),
+                    UseShellExecute = true,
+                    Verb = "runas" // 请求管理员权限（内存修改可能需要）
+                };
+
+                process25 = Process.Start(startInfo);
+
+                Thread.Sleep(500);
+
+                ModifyMemory(process25.Id, new byte[] { 0x61, 0x64, 0x64, 0x72, 0x3D, 0x22, 0x7B, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x7D, 0x3A, 0x32, 0x39, 0x35, 0x31, 0x31, 0x22, 0x2F, 0x3E, 0x0D },
+                                           new byte[] { 0x61, 0x64, 0x64, 0x72, 0x3D, 0x22, 0x31, 0x32, 0x37, 0x2E, 0x30, 0x2E, 0x30, 0x2E, 0x31, 0x3A, 0x33, 0x39, 0x33, 0x31, 0x32, 0x22, 0x2F, 0x3E });
+
+                Thread.Sleep(100);
+
+                ModifyMemory(process25.Id, new byte[] { 0x31, 0x39, 0x32, 0x2E, 0x31, 0x34, 0x34, 0x2E, 0x32, 0x31, 0x33, 0x2E, 0x31, 0x38, 0x35 },
+                                           new byte[] { 0x31, 0x35, 0x38, 0x2E, 0x32, 0x34, 0x37, 0x2E, 0x32, 0x32, 0x30, 0x2E, 0x38, 0x37, 0x00 });
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                Console.WriteLine($"UAC取消或权限不足: {ex.Message}");
+            }
+            finally
+            {
+                process25?.Dispose(); // 释放进程资源（不影响目标进程运行）
+            }
+        }
+        else
+        {
+            DataPacket packet = new DataPacket
+            {
+                Nickname = ProfileService.SettingConfig.Name,
+                TimeTicks = MultyPlayer.GetUpTime()
             };
 
-            process = Process.Start(startInfo);
-            Console.WriteLine($"进程已启动, ID: {process.Id}");
+            Process process = null;
+            try
+            {
+                // 1. 启动目标进程
+                string passport = Base64Helper.Encode(JsonHelper.Serialize(packet));
+                ProcessStartInfo startInfo = new ProcessStartInfo("KartRider.exe", $"TGC -region:3 -passport:{passport}")
+                {
+                    WorkingDirectory = Path.GetFullPath(kartRiderDirectory),
+                    UseShellExecute = true,
+                    Verb = "runas" // 请求管理员权限（内存修改可能需要）
+                };
 
-            // 2. 等待进程初始化（根据实际情况调整等待时间，确保进程加载完成）
-            Thread.Sleep(5000); // 等待5秒（可根据需要延长）
+                process = Process.Start(startInfo);
+                Console.WriteLine($"进程已启动, ID: {process.Id}");
 
-            // 3. 查找并修改内存
+                // 2. 等待进程初始化（根据实际情况调整等待时间，确保进程加载完成）
+                Thread.Sleep(1000); // 等待1秒（可根据需要延长）
 
-            // 修改指定位置的内存值
-            // 地址009C610E改为byte 120
-            ModifySpecificMemory(process.Id, new IntPtr(0x009C610E), (byte)120);
-            // 地址011F1C64改为单浮点10000
-            ModifySpecificMemory(process.Id, new IntPtr(0x011F1C64), 10000f);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            Console.WriteLine($"UAC取消或权限不足: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"操作失败: {ex.Message}");
-        }
-        finally
-        {
-            process?.Dispose(); // 释放进程资源（不影响目标进程运行）
+                // 3. 查找并修改内存
+
+                // 修改指定位置的内存值
+                // 地址009C610E改为byte 120
+                ModifySpecificMemory(process.Id, new IntPtr(0x009C610E), (byte)120);
+                // 地址011F1C64改为单浮点10000
+                ModifySpecificMemory(process.Id, new IntPtr(0x011F1C64), 10000f);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                Console.WriteLine($"UAC取消或权限不足: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"操作失败: {ex.Message}");
+            }
+            finally
+            {
+                process?.Dispose(); // 释放进程资源（不影响目标进程运行）
+            }
         }
     }
 
@@ -116,23 +152,15 @@ class MemoryModifier
     private bool ModifyMemory(int processId, byte[] searchBytes, byte[] replaceBytes)
     {
         if (searchBytes.Length != replaceBytes.Length)
-        {
             Console.WriteLine("查找和替换的字节长度必须一致");
-            return false;
-        }
 
         IntPtr hProcess = OpenProcess(PROCESS_ACCESS_FLAGS, false, processId);
         if (hProcess == IntPtr.Zero)
-        {
             Console.WriteLine("无法打开进程, 可能权限不足");
-            return false;
-        }
 
         try
         {
             IntPtr address = IntPtr.Zero;
-            bool modified = false; // 跟踪是否至少修改了一个匹配
-
             while (true)
             {
                 // 枚举进程内存页
@@ -148,14 +176,10 @@ class MemoryModifier
                     byte[] buffer = new byte[(int)mbi.RegionSize];
                     if (ReadProcessMemory(hProcess, mbi.BaseAddress, buffer, buffer.Length, out int bytesRead) && bytesRead > 0)
                     {
-                        // 在当前页中搜索所有特征码匹配
-                        int index = 0;
-                        while (index < bytesRead - searchBytes.Length + 1)
+                        // 在当前页中搜索特征码
+                        int index = FindBytes(buffer, searchBytes);
+                        if (index != -1)
                         {
-                            index = FindBytes(buffer, searchBytes, index);
-                            if (index == -1)
-                                break;
-
                             // 计算实际内存地址
                             IntPtr targetAddress = IntPtr.Add(mbi.BaseAddress, index);
                             Console.WriteLine($"找到特征码, 地址: 0x{targetAddress:X}");
@@ -163,15 +187,12 @@ class MemoryModifier
                             // 修改内存
                             if (WriteProcessMemory(hProcess, targetAddress, replaceBytes, replaceBytes.Length, out int bytesWritten) && bytesWritten == replaceBytes.Length)
                             {
-                                modified = true;
+                                return true;
                             }
                             else
                             {
                                 Console.WriteLine("写入内存失败, 可能没有写入权限");
                             }
-
-                            // 移动到下一个可能的匹配位置（避免重叠匹配）
-                            index += searchBytes.Length;
                         }
                     }
                 }
@@ -180,7 +201,7 @@ class MemoryModifier
                 address = IntPtr.Add(mbi.BaseAddress, (int)mbi.RegionSize);
             }
 
-            return modified; // 返回是否至少修改了一个匹配
+            return false; // 未找到特征码
         }
         finally
         {
@@ -189,11 +210,11 @@ class MemoryModifier
     }
 
     /// <summary>
-    /// 在字节数组中从指定位置开始查找目标序列
+    /// 在字节数组中查找目标序列
     /// </summary>
-    private int FindBytes(byte[] buffer, byte[] searchBytes, int startIndex = 0)
+    private int FindBytes(byte[] buffer, byte[] searchBytes)
     {
-        for (int i = startIndex; i <= buffer.Length - searchBytes.Length; i++)
+        for (int i = 0; i <= buffer.Length - searchBytes.Length; i++)
         {
             bool match = true;
             for (int j = 0; j < searchBytes.Length; j++)
